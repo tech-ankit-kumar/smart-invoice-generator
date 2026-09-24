@@ -180,12 +180,9 @@ The data visible in the screenshots is **demo/placeholder data** used to demonst
 
 ---
 
-## 📌 GitHub Tip
+## 👨‍💻 Author
 
-When uploading this project to GitHub, upload **all files together**, especially:
+**Ankit Kumar**
 
-- `index.html`
-- `README.md`
-- all `01-*.png` through `09-*.png` screenshots
-
-If the screenshots are uploaded with the same filenames and folder structure shown above, GitHub will automatically display them inside this README.
+- GitHub: [@tech-ankit-kumar](https://github.com/tech-ankit-kumar)
+- Project: Smart Invoice Generator
