@@ -1,0 +1,1274 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Smart Invoice Generator</title>
+  <style>
+:root{
+  --bg:#f5f7fb; --surface:#fff; --surface-2:#f8f9fc; --text:#141622; --muted:#697083;
+  --border:#e7e9ef; --primary:#6c5ce7; --primary-2:#8b5cf6; --shadow:0 20px 60px rgba(30,35,70,.10);
+}
+*{box-sizing:border-box}
+html,body{margin:0;min-height:100%;font-family:Inter,system-ui,sans-serif;color:var(--text);background:var(--bg)}
+body{padding:26px;position:relative;overflow-x:hidden;transition:.3s}
+button,input,textarea{font:inherit}
+button{cursor:pointer}
+.bg-orb{display:none}
+
+/* ============ TOPBAR (higher stacking context than app-shell) ============ */
+.topbar{
+  max-width:1450px;margin:0 auto 22px;
+  display:flex;justify-content:space-between;align-items:flex-start;gap:20px;
+  position:relative;
+  z-index:100;                     /* ⬅ key fix: above .app-shell */
+}
+.brand{font-size:25px;font-weight:800;letter-spacing:-.7px}
+.subtitle{font-size:12px;color:var(--muted);margin-top:5px}
+
+/* Three-dot menu */
+.menu-wrap{position:relative;flex-shrink:0}
+.menu-toggle{
+  width:44px;height:44px;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;
+  background:var(--surface);border:1px solid var(--border);border-radius:14px;
+  padding:0;box-shadow:var(--shadow);transition:.2s;
+}
+.menu-toggle:hover{border-color:var(--primary)}
+.menu-toggle span{
+  display:block;width:5px;height:5px;border-radius:50%;
+  background:var(--text);transition:.2s;
+}
+.menu-toggle.active{border-color:var(--primary);background:color-mix(in srgb,var(--primary) 8%,var(--surface))}
+.menu-toggle.active span{background:var(--primary)}
+
+.menu-panel{
+  position:absolute;top:calc(100% + 10px);right:0;
+  width:370px;max-width:calc(100vw - 28px);
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:16px;
+  box-shadow:0 20px 60px rgba(20,22,34,.28), 0 4px 12px rgba(20,22,34,.10);
+  z-index:1000;                    /* ⬅ sits above everything in topbar */
+  overflow:hidden;
+  animation:menuIn .16s ease-out;
+}
+@keyframes menuIn{
+  from{opacity:0;transform:translateY(-6px)}
+  to{opacity:1;transform:translateY(0)}
+}
+.menu-panel[hidden]{display:none}
+
+.menu-tabs{
+  display:flex;
+  background:var(--surface-2);
+  border-bottom:1px solid var(--border);
+}
+.menu-tab{
+  flex:1;border:0;background:transparent;
+  color:var(--muted);
+  padding:14px 12px;
+  font-weight:800;font-size:12px;
+  display:flex;align-items:center;justify-content:center;gap:7px;
+  border-bottom:2px solid transparent;
+  transition:.15s;
+}
+.menu-tab:hover{color:var(--text)}
+.menu-tab.active{
+  color:var(--primary);
+  border-bottom-color:var(--primary);
+  background:var(--surface);
+}
+.tab-badge{
+  background:var(--surface-2);color:var(--muted);
+  padding:2px 8px;border-radius:20px;
+  font-size:9px;font-weight:800;min-width:18px;text-align:center;
+  border:1px solid var(--border);
+}
+.menu-tab.active .tab-badge{
+  background:var(--primary);color:#fff;border-color:var(--primary);
+}
+
+.menu-tab-content{padding:16px;max-height:min(70vh,520px);overflow-y:auto}
+.menu-tab-content[hidden]{display:none}
+
+/* Theme switcher inside menu */
+.menu-tab-content .theme-switcher{
+  display:flex;gap:6px;
+  background:var(--surface-2);
+  border:1px solid var(--border);
+  padding:6px;border-radius:14px;
+  width:100%;
+}
+.menu-tab-content .theme-btn{
+  flex:1;
+  border:0;background:transparent;color:var(--muted);
+  padding:11px 8px;border-radius:10px;
+  font-size:11px;font-weight:800;
+  transition:.15s;
+}
+.menu-tab-content .theme-btn:hover{color:var(--text)}
+.menu-tab-content .theme-btn.active{background:var(--text);color:var(--surface)}
+
+/* History tab */
+.history-filters{
+  display:flex;flex-direction:column;gap:8px;
+  margin-bottom:12px;
+  padding-bottom:12px;
+  border-bottom:1px solid var(--border);
+}
+.history-filters input{font-size:11px;padding:9px 11px}
+.history-filter-actions{display:flex;gap:6px}
+.history-filter-actions button{flex:1}
+
+.history-item{
+  display:flex;justify-content:space-between;align-items:center;gap:10px;
+  padding:11px 0;border-bottom:1px solid var(--border);
+  font-size:11px;
+}
+.history-item:last-child{border-bottom:0}
+.history-main{display:flex;flex-direction:column;gap:3px;min-width:0;flex:1}
+.history-main b{font-size:11px}
+.history-main span{font-size:10px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.history-main small{font-size:9px;color:var(--muted)}
+.history-actions{display:flex;gap:4px;flex-shrink:0}
+.history-actions button{
+  border:1px solid var(--border);background:var(--surface-2);
+  border-radius:8px;padding:6px 8px;
+  color:var(--primary);font-weight:800;font-size:9px;
+}
+.history-actions button.danger{color:#ef476f}
+.history-empty{
+  font-size:11px;color:var(--muted);
+  padding:24px 10px;text-align:center;
+}
+
+/* ============ APP SHELL ============ */
+.app-shell{
+  max-width:1450px;margin:auto;
+  display:grid;grid-template-columns:minmax(430px, .85fr) minmax(500px,1.15fr);
+  gap:22px;
+  position:relative;
+  z-index:1;                       /* ⬅ sits below topbar */
+}
+.panel{background:var(--surface);border:1px solid var(--border);border-radius:24px;box-shadow:var(--shadow)}
+.editor-panel{padding:26px}
+.preview-panel{padding:22px;min-width:0}
+.section-head,.items-head,.preview-toolbar{display:flex;justify-content:space-between;align-items:center;gap:15px}
+.eyebrow{font-size:10px;text-transform:uppercase;letter-spacing:1.5px;font-weight:800;color:var(--primary)}
+h1{margin:5px 0 0;font-size:28px;letter-spacing:-1px}
+.section-title{font-size:12px;font-weight:800;margin-bottom:12px}
+.form-section{padding:20px 0;border-bottom:1px solid var(--border)}
+.form-section:first-of-type{margin-top:10px}
+.form-section:last-of-type{border-bottom:0}
+.grid{display:grid;gap:12px}.grid.two{grid-template-columns:1fr 1fr}.grid.three{grid-template-columns:1fr 1fr 1fr}
+.full{grid-column:1/-1}
+label{font-size:10px;font-weight:700;color:var(--muted);display:flex;flex-direction:column;gap:6px}
+input,textarea{width:100%;border:1px solid var(--border);background:var(--surface-2);color:var(--text);outline:0;border-radius:11px;padding:11px 12px;font-size:12px;transition:.2s}
+input::placeholder,textarea::placeholder{color:var(--muted);opacity:.55;font-weight:400}
+input:focus,textarea:focus{border-color:var(--primary);box-shadow:0 0 0 3px color-mix(in srgb,var(--primary) 12%,transparent)}
+textarea{resize:none;overflow:hidden;min-height:44px;line-height:1.5;font-family:inherit}
+
+.primary-btn,.secondary-btn,.ghost-btn{border:0;border-radius:11px;padding:11px 15px;font-weight:800;font-size:12px}
+.primary-btn{background:linear-gradient(135deg,var(--primary),var(--primary-2));color:#fff;box-shadow:0 8px 20px rgba(108,92,231,.22)}
+.primary-btn.small{padding:9px 12px}
+.secondary-btn{background:var(--surface-2);border:1px solid var(--border);color:var(--text)}
+.ghost-btn{background:transparent;border:1px solid var(--border);color:var(--text)}
+.ghost-btn.small{padding:7px 10px;font-size:10px}
+.ghost-btn.danger{color:#ef476f;border-color:rgba(239,71,111,.35)}
+.actions{display:flex;gap:10px;padding:20px 0 0}
+.actions button{flex:1}
+.item-row{display:grid;grid-template-columns:1.6fr .55fr .85fr 30px;gap:8px;align-items:end;margin-bottom:9px}
+.item-row .remove{height:38px;border:0;background:transparent;color:#ef476f;font-size:18px}
+.preview-toolbar{padding:0 4px 16px}.preview-toolbar #statusText{font-size:10px;color:var(--muted)}
+
+/* ============ INVOICE ============ */
+.invoice-card{
+  background:#fff;color:#171925;
+  border:1px solid #c4cad7;
+  border-radius:18px;
+  padding:42px;
+  min-height:760px;
+  box-shadow:0 15px 50px rgba(0,0,0,.08);
+  display:flex;flex-direction:column;
+}
+.invoice-top{display:flex;justify-content:space-between;gap:20px;border-bottom:1px solid #d6dae4;padding-bottom:26px}
+.company-name{font-size:24px;font-weight:800;letter-spacing:-.7px}
+.detail-line{
+  font-size:11px;color:#3f4663;margin-top:4px;
+  font-weight:500;line-height:1.5;
+  white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word;
+}
+.detail-line:empty{display:none}
+.gstin-line{font-size:10px;color:#3f4663;margin-top:5px;font-weight:700;letter-spacing:.4px}
+.invoice-heading{text-align:right}
+.invoice-heading div{font-size:31px;font-weight:800;letter-spacing:2px}
+.invoice-heading span{font-size:11px;color:#777d8e}
+.invoice-meta{display:flex;justify-content:space-between;padding:24px 0;gap:20px;border-bottom:1px solid #d6dae4}
+.invoice-meta > div{display:flex;flex-direction:column;gap:5px;min-width:0}
+.invoice-meta span{font-size:8px;letter-spacing:1.4px;color:#9095a5;font-weight:800}
+.invoice-meta strong{font-size:12px;color:#171925}
+.invoice-meta .detail-line{margin-top:2px}
+.invoice-table-wrap{
+  margin-top:20px;border:1px solid #c4cad7;
+  border-radius:10px;overflow:hidden;
+  align-self:stretch;flex:0 0 auto;
+}
+.invoice-table{width:100%;border-collapse:collapse;font-size:10px;table-layout:fixed}
+.invoice-table th{
+  text-align:center;background:#eaeef8;color:#3d4468;
+  font-size:8px;text-transform:uppercase;letter-spacing:1px;font-weight:800;
+  padding:11px;border-right:1px solid #c4cad7;border-bottom:1px solid #c4cad7;
+}
+.invoice-table th:last-child{border-right:none}
+.invoice-table td{
+  padding:13px 11px;
+  border-right:1px solid #d6dae4;border-bottom:1px solid #d6dae4;
+  vertical-align:top;text-align:center;
+  overflow-wrap:anywhere;word-break:break-word;
+}
+.invoice-table td:last-child{border-right:none}
+.invoice-table tbody tr:last-child td{border-bottom:none}
+.totals-area{display:flex;justify-content:flex-end;margin-top:24px}
+.totals{width:250px;flex:0 0 auto}
+.totals div{display:flex;justify-content:space-between;padding:8px 0;font-size:10px;color:#777d8e}
+.totals .grand{border-top:1px solid #c4cad7;padding-top:14px;margin-top:8px;color:#171925;font-size:13px}
+.totals .grand strong{font-size:18px}
+.totals span .rate{font-style:normal;font-size:9px;color:#9aa0b5;font-weight:600;margin-left:4px}
+
+/* Notes sits on the same row as the QR/payment block, at a fixed min-height so its
+   position stays put whether or not the QR is actually showing */
+.notes-payment-row{display:flex;justify-content:space-between;align-items:center;gap:18px;margin-top:28px;min-height:112px}
+.thanks{
+  font-size:10px;color:#777d8e;max-width:280px;min-width:0;flex:1 1 auto;
+  white-space:pre-wrap;line-height:1.55;overflow-wrap:anywhere;word-break:break-word;
+}
+.invoice-payment{
+  display:flex;justify-content:flex-end;align-items:center;gap:18px;
+  flex:0 0 auto;margin:0;padding:14px 16px;
+  border:1px solid #d3d6e2;border-radius:14px;
+  background:linear-gradient(135deg,#faf9ff,#f2fbff);max-width:330px;
+}
+.payment-copy{display:flex;flex-direction:column;gap:5px;text-align:right}
+.payment-copy strong{font-size:10px;color:#4e47b8;word-break:break-all}
+.payment-copy span{font-size:9px;color:#777d8e}
+.upi-qr{width:112px;height:112px;display:flex;align-items:center;justify-content:center;background:#fff;border-radius:8px}
+.upi-qr img,.upi-qr canvas{display:block;width:112px!important;height:112px!important}
+.qr-fallback{font-size:9px;color:#777d8e;text-align:center;padding:8px;line-height:1.4}
+.invoice-signature{width:240px;margin:34px 0 0 auto;text-align:center}
+.signature-label{
+  border-top:1px solid #c4cad7;padding-top:7px;
+  font-size:8px;letter-spacing:1px;color:#777d8e;font-weight:800;
+}
+.invoice-payment .signature-label{margin-bottom:2px}
+
+.toast{
+  position:fixed;right:24px;bottom:24px;background:#171925;color:#fff;
+  padding:12px 16px;border-radius:12px;font-size:12px;
+  opacity:0;transform:translateY(15px);pointer-events:none;
+  transition:.25s;
+  z-index:9999;                    /* ⬅ above everything, including menu */
+}
+.toast.show{opacity:1;transform:none}
+
+.payment-mode{display:flex;gap:16px;flex-wrap:wrap;margin-top:12px}
+.radio-option{display:flex;flex-direction:row;align-items:center;gap:7px;font-size:10px;color:var(--text);font-weight:700}
+.radio-option input{width:auto;accent-color:var(--primary)}
+.custom-payment-wrap{margin-top:10px}
+.custom-payment-wrap[hidden]{display:none}
+.upi-help{font-size:9px;color:var(--muted);margin-top:8px}
+
+/* ============ THEMES ============ */
+body[data-theme="dark"]{
+  --bg:#0e1017;--surface:#171a24;--surface-2:#11141d;
+  --text:#f4f5f8;--muted:#a4a9b9;--border:#2a2e3b;
+  --shadow:0 20px 60px rgba(0,0,0,.25);
+}
+body[data-theme="dark"] .invoice-card{background:#fff;color:#171925}
+body[data-theme="dark"] .menu-tab-content .theme-btn.active{background:#fff;color:#171925}
+body[data-theme="dark"] .menu-tab.active{background:var(--surface)}
+body[data-theme="dark"] .menu-panel{
+  box-shadow:0 20px 60px rgba(0,0,0,.55), 0 4px 12px rgba(0,0,0,.35);
+}
+
+body[data-theme="gradient"]{
+  --bg:#17122b;--surface:rgba(255,255,255,.11);--surface-2:rgba(255,255,255,.08);
+  --text:#fff;--muted:#d4d0e7;--border:rgba(255,255,255,.17);
+  --shadow:0 25px 80px rgba(0,0,0,.28);
+  background:linear-gradient(125deg,#26145e,#6a1b72 45%,#0e638a);
+  min-height:100vh;
+}
+body[data-theme="gradient"] .bg-orb{display:block;position:fixed;width:300px;height:300px;border-radius:50%;filter:blur(65px);opacity:.45;z-index:0;pointer-events:none}
+.orb-one{background:#ff4ecd;top:-100px;left:-60px}
+.orb-two{background:#38d9ff;right:-80px;bottom:-100px}
+body[data-theme="gradient"] .menu-tab.active{background:rgba(255,255,255,.1)}
+body[data-theme="gradient"] .menu-tab-content .theme-btn.active{background:#fff;color:#24183e}
+body[data-theme="gradient"] .menu-panel{
+  backdrop-filter:blur(24px);
+  -webkit-backdrop-filter:blur(24px);
+  background:rgba(30,20,55,.92);
+  box-shadow:0 25px 80px rgba(0,0,0,.55), 0 4px 12px rgba(0,0,0,.35);
+}
+body[data-theme="gradient"] .invoice-card{box-shadow:0 25px 80px rgba(0,0,0,.35)}
+
+/* ============ RESPONSIVE ============ */
+@media(max-width:1050px){
+  .app-shell{grid-template-columns:1fr}
+  .preview-panel{order:-1}
+  .invoice-card{min-height:auto}
+}
+@media(max-width:650px){
+  body{padding:14px}
+  .topbar{flex-direction:row;align-items:flex-start}
+  .brand{font-size:21px}
+  .subtitle{font-size:11px}
+  .menu-toggle{width:40px;height:40px}
+  .menu-panel{
+    position:fixed;
+    top:auto;
+    bottom:14px;
+    left:14px;
+    right:14px;
+    width:auto;
+    max-width:none;
+    border-radius:18px;
+  }
+  .menu-tab-content{max-height:60vh}
+  .editor-panel,.preview-panel{padding:16px}
+  .grid.two,.grid.three{grid-template-columns:1fr}
+  .item-row{grid-template-columns:1.3fr .55fr .8fr 28px}
+  .invoice-card{padding:24px}
+  .invoice-top,.invoice-meta,.totals-area,.notes-payment-row{flex-direction:column}
+  .notes-payment-row{align-items:flex-start;min-height:0}
+  .invoice-heading{text-align:left}
+  .totals{width:100%}
+  .invoice-payment{max-width:100%;width:100%}
+}
+
+/* ============ PRINT ============ */
+@media print{
+  @page{ size: auto; margin: 8mm; }
+  *{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}
+  html, body{background:#fff!important;padding:0!important;margin:0!important;width:100%!important;height:auto!important;min-height:0!important}
+  body{font-family:Inter,system-ui,sans-serif;color:#171925}
+  .topbar,.menu-wrap,.menu-panel,.menu-toggle,.editor-panel,.preview-toolbar,.bg-orb,.toast{display:none!important}
+  .app-shell{display:block!important;margin:0!important;padding:0!important;max-width:100%!important;width:100%!important;gap:0!important}
+  .preview-panel{display:block!important;padding:0!important;margin:0!important;border:0!important;box-shadow:none!important;background:transparent!important;width:100%!important;max-width:100%!important}
+  .invoice-card{
+    display:flex!important;flex-direction:column!important;
+    width:100%!important;max-width:100%!important;
+    min-height: calc(100vh - 16mm)!important;height:auto!important;
+    margin:0!important;padding:0!important;border-radius:12px!important;overflow:hidden!important;
+    background:#fff!important;box-shadow:0 0 0 1px #c4cad7!important;
+    border:1px solid #c4cad7!important;position:relative!important;box-sizing:border-box!important;
+  }
+  .invoice-card:before{
+    content:"";display:block;height:8px;
+    background:linear-gradient(90deg,#6c5ce7,#8b5cf6,#ff4ecd,#38d9ff)!important;
+    flex:0 0 auto;
+  }
+  .invoice-top{
+    padding:22px 28px 20px!important;
+    background:linear-gradient(135deg,#faf9ff 0%,#fff 55%,#f6fbff 100%)!important;
+    border-bottom:1px solid #d6dae4!important;flex:0 0 auto;
+  }
+  .invoice-heading div{color:#5b4de0!important}
+  .invoice-meta{margin:0 28px!important;padding:18px 0!important;border-bottom:1px solid #d6dae4!important;flex:0 0 auto}
+  .invoice-meta span{color:#7b72d8!important}
+  .invoice-table-wrap{
+    margin:16px 28px 0!important;border:1px solid #c4cad7!important;
+    border-radius:10px!important;overflow:hidden!important;flex:0 0 auto!important;
+  }
+  .invoice-table{width:100%!important}
+  .invoice-table thead{display:table-header-group}
+  .invoice-table th{
+    background:linear-gradient(135deg,#eaeef8,#e6efff)!important;
+    color:#3d4468!important;text-align:center!important;
+    border-right:1px solid #c4cad7!important;border-bottom:1px solid #c4cad7!important;
+  }
+  .invoice-table th:last-child{border-right:none!important}
+  .invoice-table td{
+    text-align:center!important;
+    border-right:1px solid #d6dae4!important;border-bottom:1px solid #d6dae4!important;
+    overflow-wrap:anywhere!important;word-break:break-word!important;
+  }
+  .invoice-table td:last-child{border-right:none!important}
+  .invoice-table tbody tr:last-child td{border-bottom:none!important}
+  .invoice-table tr{page-break-inside:avoid}
+  .totals-area{margin:18px 28px 0!important;flex:0 0 auto;justify-content:flex-end!important}
+  .totals{width:250px!important;flex:0 0 auto!important}
+  .totals .grand{
+    background:linear-gradient(135deg,#f0edff,#eafaff)!important;
+    border:0!important;border-radius:12px!important;
+    padding:12px 14px!important;margin-top:8px!important;
+  }
+  .totals .grand strong{color:#5b4de0!important}
+  .notes-payment-row{
+    margin:18px 28px 0!important;flex:0 0 auto;
+    align-items:center!important;gap:32px!important;min-height:112px!important;
+  }
+  .thanks{
+    background:#faf9ff!important;border-left:3px solid #8b5cf6!important;
+    padding:10px 12px!important;border-radius:0 8px 8px 0!important;
+    align-self:center!important;max-width:280px!important;min-width:0!important;
+    white-space:pre-wrap!important;overflow-wrap:anywhere!important;word-break:break-word!important;
+    line-height:1.55!important;
+  }
+  .invoice-payment{
+    margin:0!important;max-width:330px!important;
+    background:linear-gradient(135deg,#faf9ff,#f2fbff)!important;flex:0 0 auto;
+  }
+  .invoice-signature{
+    display:block!important;visibility:visible!important;
+    margin-top:auto!important;margin-left:auto!important;
+    margin-right:28px!important;margin-bottom:22px!important;flex:0 0 auto;
+  }
+  .signature-label{visibility:visible!important}
+  body[data-theme="gradient"] .invoice-card,
+  body[data-theme="dark"] .invoice-card{background:#fff!important;color:#171925!important}
+}
+  </style>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js" defer></script>
+</head>
+<body>
+  <div class="bg-orb orb-one"></div>
+  <div class="bg-orb orb-two"></div>
+
+  <header class="topbar">
+    <div>
+      <div class="brand">✦ Smart Invoice</div>
+      <div class="subtitle">Create clean, professional invoices in seconds</div>
+    </div>
+
+    <!-- Three-dot menu -->
+    <div class="menu-wrap">
+      <button id="menuToggle" class="menu-toggle" aria-label="Open menu" aria-expanded="false">
+        <span></span><span></span><span></span>
+      </button>
+
+      <div class="menu-panel" id="menuPanel" hidden>
+        <div class="menu-tabs" role="tablist">
+          <button class="menu-tab active" data-tab="theme" role="tab">🎨 Theme</button>
+          <button class="menu-tab" data-tab="history" role="tab">📋 History <span id="historyCount" class="tab-badge">0</span></button>
+        </div>
+
+        <!-- Theme tab -->
+        <div class="menu-tab-content" id="tab-theme">
+          <div class="theme-switcher">
+            <button data-theme="light" class="theme-btn active">☀️ Light</button>
+            <button data-theme="dark" class="theme-btn">🌙 Dark</button>
+            <button data-theme="gradient" class="theme-btn">🌈 Gradient</button>
+          </div>
+        </div>
+
+        <!-- History tab -->
+        <div class="menu-tab-content" id="tab-history" hidden>
+          <div class="history-filters">
+            <input id="historyDate" type="date" aria-label="Search by invoice date">
+            <input id="historyText" type="search" placeholder="Search invoice no. or customer..." aria-label="Search invoices">
+            <div class="history-filter-actions">
+              <button id="clearHistoryBtn" class="ghost-btn small">Clear filters</button>
+              <button id="deleteAllBtn" class="ghost-btn small danger">🗑 Delete all</button>
+            </div>
+          </div>
+          <div id="history"></div>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <main class="app-shell">
+    <section class="panel editor-panel">
+      <div class="section-head">
+        <div>
+          <span class="eyebrow">Invoice builder</span>
+          <h1>Create invoice</h1>
+        </div>
+        <button id="newInvoiceBtn" class="ghost-btn">＋ New</button>
+      </div>
+
+      <div class="form-section">
+        <div class="section-title">Company details</div>
+        <div class="grid two">
+          <label>Company name<input id="companyName" placeholder="Enter your company name"></label>
+          <label>Phone<input id="companyPhone" placeholder="+91 98765 43210"></label>
+          <label>Company email<input id="companyEmail" type="email" placeholder="hello@company.com"></label>
+          <label>GSTIN <span style="color:var(--muted);font-weight:500;text-transform:none;letter-spacing:0">(optional)</span><input id="companyGSTIN" placeholder="22AAAAA0000A1Z5"></label>
+          <label class="full">Company address<textarea id="companyAddress" placeholder="MG Road, New Delhi, India"></textarea></label>
+        </div>
+      </div>
+
+      <div class="form-section">
+        <div class="section-title">Customer details</div>
+        <div class="grid two">
+          <label>Customer name<input id="customerName" placeholder="Rahul Sharma"></label>
+          <label>Customer phone<input id="customerPhone" placeholder="+91 98765 00000"></label>
+          <label>Customer email<input id="customerEmail" type="email" placeholder="customer@email.com"></label>
+          <label>Customer GSTIN <span style="color:var(--muted);font-weight:500;text-transform:none;letter-spacing:0">(optional)</span><input id="customerGSTIN" placeholder="22AAAAA0000A1Z5"></label>
+          <label class="full">Billing address<textarea id="customerAddress" placeholder="Customer address"></textarea></label>
+        </div>
+      </div>
+
+      <div class="form-section">
+        <div class="section-title">Invoice details</div>
+        <div class="grid three">
+          <label>Invoice number<input id="invoiceNumber"></label>
+          <label>Invoice date<input id="invoiceDate" type="date"></label>
+          <label>Due date<input id="dueDate" type="date"></label>
+        </div>
+      </div>
+
+      <div class="form-section">
+        <div class="items-head">
+          <div class="section-title">Products / services</div>
+          <button id="addItemBtn" class="primary-btn small">＋ Add item</button>
+        </div>
+        <div id="itemsEditor" class="items-editor"></div>
+      </div>
+
+      <div class="form-section">
+        <div class="section-title">Tax &amp; discount</div>
+        <div class="grid two">
+          <label>GST / Tax %<input id="taxRate" type="number" min="0" step="0.01" placeholder="18" inputmode="decimal"></label>
+          <label>Discount %<input id="discountRate" type="number" min="0" max="100" step="0.01" placeholder="0" inputmode="decimal"></label>
+        </div>
+      </div>
+
+      <div class="form-section">
+        <div class="section-title">UPI payment</div>
+        <div class="grid two">
+          <label class="full">UPI ID<input id="upiId" placeholder="yourname@upi" autocomplete="off"></label>
+        </div>
+        <div class="payment-mode">
+          <label class="radio-option"><input type="radio" name="upiMode" value="full" checked> Full invoice amount</label>
+          <label class="radio-option"><input type="radio" name="upiMode" value="customer"> Customer enters amount</label>
+          <label class="radio-option"><input type="radio" name="upiMode" value="custom"> Fixed custom amount</label>
+        </div>
+        <div id="customPaymentWrap" class="custom-payment-wrap" hidden>
+          <label>Fixed payment amount<input id="customPaymentAmount" type="number" min="0" step="0.01" placeholder="Enter amount in ₹" inputmode="decimal"></label>
+        </div>
+        <div class="upi-help">Customer enters amount mode lets the buyer pay any amount directly in their UPI app.</div>
+      </div>
+
+      <div class="form-section">
+        <div class="section-title">Notes</div>
+        <textarea id="notes" placeholder="Thank you for your business!"></textarea>
+      </div>
+
+      <div class="actions">
+        <button id="saveBtn" class="primary-btn">💾 Save invoice</button>
+        <button id="printBtn" class="secondary-btn">🖨️ Print / PDF</button>
+      </div>
+    </section>
+
+    <section class="panel preview-panel">
+      <div class="preview-toolbar">
+        <span class="eyebrow">Live preview</span>
+        <span id="statusText">Auto-updating</span>
+      </div>
+
+      <article id="invoicePreview" class="invoice-card">
+        <div class="invoice-top">
+          <div>
+            <div id="previewCompany" class="company-name">Your Company</div>
+            <div id="previewCompanyPhone" class="detail-line"></div>
+            <div id="previewCompanyEmail" class="detail-line"></div>
+            <div id="previewCompanyAddress" class="detail-line"></div>
+            <div id="previewCompanyGstin" class="gstin-line" style="display:none"></div>
+          </div>
+          <div class="invoice-heading">
+            <div id="previewTitle">INVOICE</div>
+            <span id="previewNumber">#INV-0000</span>
+          </div>
+        </div>
+
+        <div class="invoice-meta">
+          <div>
+            <span>BILL TO</span>
+            <strong id="previewCustomer">Walk-in Customer</strong>
+            <div id="previewCustomerPhone" class="detail-line"></div>
+            <div id="previewCustomerEmail" class="detail-line"></div>
+            <div id="previewCustomerAddress" class="detail-line"></div>
+            <div id="previewCustomerGstin" class="gstin-line" style="display:none"></div>
+          </div>
+          <div>
+            <span>ISSUED</span>
+            <strong id="previewDate">—</strong>
+            <span>DUE</span>
+            <strong id="previewDueDate">—</strong>
+          </div>
+        </div>
+
+        <div class="invoice-table-wrap">
+          <table class="invoice-table">
+            <thead>
+              <tr>
+                <th style="width:45%">Description</th>
+                <th style="width:15%">Qty</th>
+                <th style="width:20%">Price</th>
+                <th style="width:20%">Total</th>
+              </tr>
+            </thead>
+            <tbody id="previewItems"></tbody>
+          </table>
+        </div>
+
+        <div class="totals-area">
+          <div class="totals">
+            <div><span>Subtotal</span><strong id="previewSubtotal">₹0.00</strong></div>
+            <div>
+              <span>Discount <em class="rate" id="previewDiscountRate">0%</em></span>
+              <strong id="previewDiscount">− ₹0.00</strong>
+            </div>
+            <div>
+              <span>GST / Tax <em class="rate" id="previewGstRate">0%</em></span>
+              <strong id="previewTax">₹0.00</strong>
+            </div>
+            <div class="grand"><span>Total</span><strong id="previewGrandTotal">₹0.00</strong></div>
+          </div>
+        </div>
+
+        <div class="notes-payment-row">
+          <div class="thanks" id="previewNotes">Thank you for your business!</div>
+          <div class="invoice-payment" id="invoicePayment" style="display:none">
+            <div class="payment-copy">
+              <div class="signature-label">SCAN TO PAY</div>
+              <strong id="previewUpiId"></strong>
+              <span id="previewUpiAmount"></span>
+            </div>
+            <div id="upiQr" class="upi-qr"></div>
+          </div>
+        </div>
+
+        <div class="invoice-signature" id="invoiceSignature">
+          <div class="signature-label">Digitally signed</div>
+        </div>
+      </article>
+    </section>
+  </main>
+
+  <div id="toast" class="toast"></div>
+
+  <script>
+/* =========================================================
+   Smart Invoice — theme + history in 3-dot menu
+   ========================================================= */
+const $ = id => document.getElementById(id);
+
+function setText(id, value){
+  const el = $(id);
+  if(el) el.textContent = value;
+}
+
+function toggleOptional(id, value, prefix){
+  const el = $(id);
+  if(!el) return;
+  const v = (value || "").trim();
+  if(v){
+    el.textContent = (prefix || "") + v;
+    el.style.display = "";
+  } else {
+    el.textContent = "";
+    el.style.display = "none";
+  }
+}
+
+function autoGrow(el){
+  if(!el) return;
+  el.style.height = "auto";
+  el.style.height = el.scrollHeight + "px";
+}
+
+let editingId = null;
+let lastQrText = "";
+let items = [{ description: "", qty: 1, price: 0 }];
+
+const PERMANENT_TITLE = "INVOICE";
+
+/* ---------- Menu toggle ---------- */
+const menuToggle = $("menuToggle");
+const menuPanel  = $("menuPanel");
+let menuOpen = false;
+
+function openMenu(){
+  menuOpen = true;
+  menuPanel.hidden = false;
+  menuToggle.classList.add("active");
+  menuToggle.setAttribute("aria-expanded", "true");
+}
+function closeMenu(){
+  menuOpen = false;
+  menuPanel.hidden = true;
+  menuToggle.classList.remove("active");
+  menuToggle.setAttribute("aria-expanded", "false");
+}
+
+menuToggle.addEventListener("click", e => {
+  e.stopPropagation();
+  menuOpen ? closeMenu() : openMenu();
+});
+
+/* Close when clicking anywhere outside the panel */
+document.addEventListener("click", e => {
+  if(!menuOpen) return;
+  if(menuPanel.contains(e.target)) return;
+  if(menuToggle.contains(e.target)) return;
+  closeMenu();
+});
+
+/* Also catch mousedown for snappier feel on some browsers */
+document.addEventListener("mousedown", e => {
+  if(!menuOpen) return;
+  if(menuPanel.contains(e.target)) return;
+  if(menuToggle.contains(e.target)) return;
+  closeMenu();
+});
+
+document.addEventListener("keydown", e => {
+  if(e.key === "Escape" && menuOpen) closeMenu();
+});
+
+/* ---------- Tab switching ---------- */
+document.querySelectorAll(".menu-tab").forEach(tab => {
+  tab.addEventListener("click", () => {
+    const target = tab.dataset.tab;
+    document.querySelectorAll(".menu-tab").forEach(t =>
+      t.classList.toggle("active", t === tab));
+    $("tab-theme").hidden   = (target !== "theme");
+    $("tab-history").hidden = (target !== "history");
+  });
+});
+
+/* ---------- helpers ---------- */
+function todayISO(offset = 0){
+  const d = new Date();
+  d.setDate(d.getDate() + offset);
+  const pad = n => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+function money(n){
+  return new Intl.NumberFormat("en-IN", {
+    style: "currency", currency: "INR", minimumFractionDigits: 2
+  }).format(Number(n) || 0);
+}
+
+function formatDate(value){
+  if(!value) return "—";
+  const d = new Date(value + "T00:00:00");
+  if(isNaN(d)) return "—";
+  return d.toLocaleDateString("en-IN", { day:"2-digit", month:"short", year:"numeric" });
+}
+
+function newNumber(){
+  return "INV-" + Math.floor(1000 + Math.random() * 9000);
+}
+
+function makeId(){
+  if(window.crypto && typeof window.crypto.randomUUID === "function") return window.crypto.randomUUID();
+  return "INV-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 9);
+}
+
+function escapeHtml(s){
+  return String(s ?? "").replace(/[&<>"']/g, m => (
+    { "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#039;" }[m]
+  ));
+}
+
+function formatRate(v){
+  const n = Number(v) || 0;
+  return (n % 1 === 0 ? n.toString() : n.toFixed(2).replace(/0+$/,'').replace(/\.$/,'')) + "%";
+}
+
+/* ---------- UPI mode ---------- */
+function getUpiMode(){
+  return document.querySelector('input[name="upiMode"]:checked')?.value || "full";
+}
+function setUpiMode(mode){
+  const el = document.querySelector(`input[name="upiMode"][value="${mode}"]`);
+  if(el) el.checked = true;
+}
+
+/* ---------- storage ---------- */
+function safeStorageGet(key, fallback = ""){
+  try { return localStorage.getItem(key) ?? fallback; }
+  catch(err){ console.warn("Storage read failed:", err); return fallback; }
+}
+function safeStorageSet(key, value){
+  try { localStorage.setItem(key, value); return true; }
+  catch(err){
+    console.error("Storage write failed:", err);
+    showToast("Save blocked by browser storage settings");
+    return false;
+  }
+}
+
+/* ---------- items editor ---------- */
+function renderItemsEditor(){
+  const wrap = $("itemsEditor");
+  if(!wrap) return;
+  wrap.innerHTML = "";
+  items.forEach((item, index) => {
+    const row = document.createElement("div");
+    row.className = "item-row";
+    row.innerHTML = `
+      <label>Description<input data-i="${index}" data-field="description" value="${escapeHtml(item.description)}" placeholder="Item description"></label>
+      <label>Qty<input type="number" min="0" step="1" inputmode="decimal" data-i="${index}" data-field="qty" value="${Number(item.qty) || 0}"></label>
+      <label>Price<input type="number" min="0" step="0.01" inputmode="decimal" data-i="${index}" data-field="price" value="${Number(item.price) || 0}"></label>
+      <button type="button" class="remove" title="Remove item" aria-label="Remove item" data-remove="${index}">×</button>`;
+    wrap.appendChild(row);
+  });
+
+  wrap.querySelectorAll("input").forEach(input => {
+    input.addEventListener("input", e => {
+      const i = Number(e.target.dataset.i);
+      const field = e.target.dataset.field;
+      if(!items[i]) return;
+      items[i][field] = field === "description"
+        ? e.target.value
+        : (Number(e.target.value) || 0);
+      updatePreview();
+    });
+  });
+
+  wrap.querySelectorAll("[data-remove]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      items.splice(Number(btn.dataset.remove), 1);
+      renderItemsEditor();
+      updatePreview();
+    });
+  });
+}
+
+/* ---------- totals ---------- */
+function calcTotals(data){
+  const subtotal = (data.items || []).reduce(
+    (sum, item) => sum + (Number(item.qty) || 0) * (Number(item.price) || 0), 0
+  );
+  const discountRate = Math.max(0, Math.min(100, Number(data.discountRate) || 0));
+  const discount = subtotal * discountRate / 100;
+  const taxable = subtotal - discount;
+  const tax = taxable * (Math.max(0, Number(data.taxRate) || 0)) / 100;
+  return { subtotal, discount, tax, grand: taxable + tax };
+}
+
+/* ---------- live preview ---------- */
+function updatePreview(){
+  setText("previewCompany", $("companyName").value || "Your Company");
+  setText("previewCompanyPhone", $("companyPhone").value || "");
+  setText("previewCompanyEmail", $("companyEmail").value || "");
+  setText("previewCompanyAddress", $("companyAddress").value || "");
+
+  setText("previewTitle", PERMANENT_TITLE);
+  setText("previewNumber", "#" + ($("invoiceNumber").value || "INV-0000"));
+
+  toggleOptional("previewCompanyGstin", $("companyGSTIN").value, "GSTIN: ");
+
+  setText("previewCustomer", $("customerName").value || "Walk-in Customer");
+  setText("previewCustomerPhone", $("customerPhone").value || "");
+  setText("previewCustomerEmail", $("customerEmail").value || "");
+  setText("previewCustomerAddress", $("customerAddress").value || "");
+
+  toggleOptional("previewCustomerGstin", $("customerGSTIN").value, "GSTIN: ");
+
+  setText("previewDate", formatDate($("invoiceDate").value));
+  setText("previewDueDate", formatDate($("dueDate").value));
+  setText("previewNotes", $("notes").value || "Thank you for your business!");
+
+  const tbody = $("previewItems");
+  tbody.innerHTML = "";
+  let subtotal = 0;
+  items.forEach(item => {
+    const total = (Number(item.qty) || 0) * (Number(item.price) || 0);
+    subtotal += total;
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td>${escapeHtml(item.description || "Item")}</td>
+                    <td>${Number(item.qty) || 0}</td>
+                    <td>${money(item.price)}</td>
+                    <td>${money(total)}</td>`;
+    tbody.appendChild(tr);
+  });
+  if(!items.length){
+    tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:#999;border-right:none">No items added</td></tr>';
+  }
+
+  const discountRate = Math.max(0, Math.min(100, Number($("discountRate").value) || 0));
+  const discount = subtotal * discountRate / 100;
+  const taxable = subtotal - discount;
+  const taxRate = Math.max(0, Number($("taxRate").value) || 0);
+  const tax = taxable * taxRate / 100;
+  const grand = taxable + tax;
+
+  setText("previewSubtotal", money(subtotal));
+  setText("previewDiscount", "− " + money(discount));
+  setText("previewTax", money(tax));
+  setText("previewGrandTotal", money(grand));
+
+  setText("previewDiscountRate", formatRate(discountRate));
+  setText("previewGstRate", formatRate(taxRate));
+
+  updateUpiQr(grand);
+}
+
+/* ---------- UPI QR ---------- */
+function updateUpiQr(grandTotal){
+  const upiId    = ($("upiId")?.value || "").trim();
+  const mode     = getUpiMode();
+  const custom   = Math.max(0, Number($("customPaymentAmount")?.value) || 0);
+  const customerChooses = mode === "customer";
+  const paymentAmount   = mode === "custom" ? custom : (Number(grandTotal) || 0);
+
+  const customWrap = $("customPaymentWrap");
+  if(customWrap) customWrap.hidden = (mode !== "custom");
+
+  const paymentBox = $("invoicePayment");
+  const qrBox      = $("upiQr");
+  if(!paymentBox || !qrBox) return;
+
+  if(!upiId){
+    paymentBox.style.display = "none";
+    qrBox.innerHTML = "";
+    lastQrText = "";
+    setText("previewUpiId", "");
+    setText("previewUpiAmount", "");
+    return;
+  }
+
+  const name    = ($("companyName")?.value || "Invoice Payment").trim().slice(0, 50);
+  const invoice = ($("invoiceNumber")?.value || "").trim();
+  const note    = "Invoice payment";
+
+  const params = new URLSearchParams({
+    pa: upiId, pn: name, cu: "INR",
+    tn: invoice ? `${note} - ${invoice}` : note
+  });
+  if(!customerChooses) params.set("am", paymentAmount.toFixed(2));
+
+  const upiUrl = `upi://pay?${params.toString()}`;
+
+  paymentBox.style.display = "flex";
+  setText("previewUpiId", upiId);
+  setText("previewUpiAmount", customerChooses
+    ? "Enter any amount in your UPI app"
+    : `Pay ${money(paymentAmount)} via UPI`);
+
+  if(upiUrl === lastQrText) return;
+  qrBox.innerHTML = "";
+
+  if(!window.QRCode){
+    qrBox.innerHTML = '<div class="qr-fallback">QR library not loaded.</div>';
+    lastQrText = "";
+    return;
+  }
+  try{
+    new QRCode(qrBox, {
+      text: upiUrl, width: 112, height: 112,
+      colorDark: "#171925", colorLight: "#ffffff",
+      correctLevel: QRCode.CorrectLevel.M
+    });
+    lastQrText = upiUrl;
+  }catch(err){
+    console.error("QR render failed:", err);
+    qrBox.innerHTML = '<div class="qr-fallback">QR error.</div>';
+    lastQrText = "";
+  }
+}
+
+/* ---------- data get / load ---------- */
+const FIELD_IDS = [
+  "companyName","companyPhone","companyEmail","companyAddress","companyGSTIN",
+  "customerName","customerPhone","customerEmail","customerAddress","customerGSTIN",
+  "invoiceNumber","invoiceDate","dueDate","taxRate","discountRate",
+  "upiId","customPaymentAmount","notes"
+];
+
+function getData(){
+  const data = {
+    id: editingId || makeId(),
+    items: JSON.parse(JSON.stringify(items)),
+    savedAt: new Date().toISOString(),
+    upiMode: getUpiMode()
+  };
+  FIELD_IDS.forEach(id => {
+    const el = $(id);
+    if(el) data[id] = el.value;
+  });
+  return data;
+}
+
+function loadData(data, { keepId = true } = {}){
+  Object.keys(data).forEach(key => {
+    if(key === "items" || key === "id" || key === "savedAt" || key === "upiMode") return;
+    const el = $(key);
+    if(el) el.value = data[key] ?? "";
+  });
+
+  setUpiMode(data.upiMode || "full");
+
+  items = Array.isArray(data.items) && data.items.length
+    ? data.items.map(i => ({
+        description: String(i.description ?? ""),
+        qty: Number(i.qty) || 0,
+        price: Number(i.price) || 0
+      }))
+    : [{ description: "", qty: 1, price: 0 }];
+
+  editingId = keepId ? (data.id || makeId()) : null;
+
+  syncDateConstraints();
+  renderItemsEditor();
+  updatePreview();
+  refreshAllTextareas();
+}
+
+/* ---------- toast ---------- */
+let toastTimer = null;
+function showToast(msg){
+  const t = $("toast");
+  t.textContent = msg;
+  t.classList.add("show");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove("show"), 1800);
+}
+
+/* ---------- history ---------- */
+function getHistory(){
+  let history = [];
+  try{
+    history = JSON.parse(safeStorageGet("smartInvoices", "[]"));
+    if(!Array.isArray(history)) history = [];
+  }catch(err){
+    console.warn("Invalid saved invoice data; starting with empty history.", err);
+    history = [];
+  }
+  let changed = false;
+  history.forEach(x => { if(x && !x.id){ x.id = makeId(); changed = true; } });
+  if(changed) safeStorageSet("smartInvoices", JSON.stringify(history));
+  return history;
+}
+
+function persistHistory(history){
+  return safeStorageSet("smartInvoices", JSON.stringify(history));
+}
+
+function renderHistory(){
+  const history = getHistory();
+  const dateFilter = $("historyDate").value;
+  const textFilter = $("historyText").value.trim().toLowerCase();
+
+  const filtered = history.filter(x => {
+    const dateOk = !dateFilter || x.invoiceDate === dateFilter;
+    const textOk = !textFilter || [x.invoiceNumber, x.customerName, x.companyName, x.customerEmail]
+      .some(v => String(v || "").toLowerCase().includes(textFilter));
+    return dateOk && textOk;
+  }).slice().reverse();
+
+  $("historyCount").textContent = filtered.length;
+
+  const box = $("history");
+  if(!filtered.length){
+    box.innerHTML = '<div class="history-empty">No invoices found.</div>';
+    return;
+  }
+
+  box.innerHTML = filtered.map(x => {
+    const amount = calcTotals(x).grand;
+    return `<div class="history-item">
+      <div class="history-main">
+        <b>${escapeHtml(x.invoiceNumber || "Invoice")}</b>
+        <span>${escapeHtml(x.customerName || "Walk-in Customer")}</span>
+        <small>${formatDate(x.invoiceDate)} · ${money(amount)}</small>
+      </div>
+      <div class="history-actions">
+        <button data-edit="${escapeHtml(x.id)}">Edit</button>
+        <button data-print="${escapeHtml(x.id)}">Print</button>
+        <button class="danger" data-delete="${escapeHtml(x.id)}">✕</button>
+      </div>
+    </div>`;
+  }).join("");
+
+  box.querySelectorAll("[data-edit]").forEach(b => b.onclick = () => {
+    const x = getHistory().find(v => v.id === b.dataset.edit);
+    if(!x) return;
+    loadData(x);
+    closeMenu();
+    window.scrollTo({ top: 0, behavior: "smooth" });
+    showToast("Invoice opened for editing");
+  });
+
+  box.querySelectorAll("[data-print]").forEach(b => b.onclick = () => {
+    const x = getHistory().find(v => v.id === b.dataset.print);
+    if(!x) return;
+    loadData(x);
+    closeMenu();
+    setTimeout(printInvoice, 120);
+  });
+
+  box.querySelectorAll("[data-delete]").forEach(b => b.onclick = () => {
+    const history = getHistory().filter(v => v.id !== b.dataset.delete);
+    if(!persistHistory(history)) return;
+    if(editingId === b.dataset.delete) editingId = null;
+    renderHistory();
+    showToast("Invoice deleted");
+  });
+}
+
+/* ---------- save / new ---------- */
+function saveInvoice(){
+  try{
+    const data = getData();
+    const history = getHistory();
+    const index = history.findIndex(x => x.id === data.id);
+    if(index >= 0) history[index] = data;
+    else history.push(data);
+
+    if(!persistHistory(history)) return;
+
+    editingId = data.id;
+    renderHistory();
+    showToast(index >= 0 ? "Invoice updated" : "Invoice saved");
+  }catch(err){
+    console.error("Invoice save failed:", err);
+    showToast("Could not save invoice");
+  }
+}
+
+function resetInvoice(){
+  editingId = null;
+  $("invoiceNumber").value = newNumber();
+  $("invoiceDate").value = todayISO();
+  $("dueDate").value = todayISO(7);
+  $("customerName").value = "";
+  $("customerEmail").value = "";
+  $("customerPhone").value = "";
+  $("customerAddress").value = "";
+  $("customerGSTIN").value = "";
+  $("taxRate").value = "";
+  $("discountRate").value = "";
+  $("notes").value = "";
+  $("upiId").value = "";
+  $("customPaymentAmount").value = "";
+  setUpiMode("full");
+
+  items = [{ description: "", qty: 1, price: 0 }];
+  lastQrText = "";
+
+  syncDateConstraints();
+  renderItemsEditor();
+  updatePreview();
+  refreshAllTextareas();
+  showToast("New invoice ready");
+}
+
+/* ---------- date constraints ---------- */
+function syncDateConstraints(){
+  const today = todayISO();
+  const invDate = $("invoiceDate").value || today;
+  $("invoiceDate").max = today;
+  $("dueDate").min = invDate;
+  if($("dueDate").value && $("dueDate").value < invDate){
+    $("dueDate").value = invDate;
+  }
+}
+
+/* ---------- theme ---------- */
+function setTheme(theme){
+  document.body.dataset.theme = (theme === "light") ? "" : theme;
+  safeStorageSet("invoiceTheme", theme);
+  document.querySelectorAll(".theme-btn").forEach(b =>
+    b.classList.toggle("active", b.dataset.theme === theme));
+}
+
+/* ---------- print ---------- */
+function printInvoice(){
+  const oldTitle = document.title;
+  document.title = "";
+  window.addEventListener("afterprint", () => { document.title = oldTitle; }, { once: true });
+  window.print();
+}
+
+/* ---------- auto-grow textareas ---------- */
+const AUTO_GROW_IDS = ["companyAddress", "customerAddress", "notes"];
+function refreshAllTextareas(){
+  AUTO_GROW_IDS.forEach(id => autoGrow($(id)));
+}
+
+/* ---------- wire up ---------- */
+document.querySelectorAll(".theme-btn").forEach(b =>
+  b.onclick = () => setTheme(b.dataset.theme));
+
+$("addItemBtn").onclick = () => {
+  items.push({ description: "", qty: 1, price: 0 });
+  renderItemsEditor();
+  updatePreview();
+};
+
+$("saveBtn").onclick  = saveInvoice;
+$("printBtn").onclick = printInvoice;
+$("newInvoiceBtn").onclick = resetInvoice;
+
+$("historyDate").addEventListener("input", renderHistory);
+$("historyText").addEventListener("input", renderHistory);
+
+$("clearHistoryBtn").onclick = () => {
+  $("historyDate").value = "";
+  $("historyText").value = "";
+  renderHistory();
+};
+
+$("deleteAllBtn").onclick = () => {
+  if(!getHistory().length) return showToast("No invoices to delete");
+  if(!confirm("Delete ALL saved invoices? This cannot be undone.")) return;
+  persistHistory([]);
+  editingId = null;
+  renderHistory();
+  showToast("All invoices deleted");
+};
+
+document.querySelectorAll('input[name="upiMode"]').forEach(r =>
+  r.addEventListener("change", updatePreview));
+
+FIELD_IDS.forEach(id => {
+  const el = $(id);
+  if(el) el.addEventListener("input", updatePreview);
+});
+
+AUTO_GROW_IDS.forEach(id => {
+  const el = $(id);
+  if(!el) return;
+  el.addEventListener("input", () => autoGrow(el));
+  autoGrow(el);
+});
+
+$("invoiceDate").addEventListener("input", syncDateConstraints);
+$("invoiceDate").addEventListener("change", syncDateConstraints);
+
+/* ---------- init ---------- */
+function init(){
+  $("invoiceNumber").value = newNumber();
+  $("invoiceDate").value   = todayISO();
+  $("dueDate").value       = todayISO(7);
+
+  syncDateConstraints();
+
+  setTheme(safeStorageGet("invoiceTheme", "gradient"));
+  renderItemsEditor();
+  updatePreview();
+  refreshAllTextareas();
+  renderHistory();
+}
+
+try{
+  init();
+}catch(err){
+  console.error("Invoice initialization failed:", err);
+  showToast("Invoice app loaded with a recoverable error");
+}
+
+window.addEventListener("load", () => {
+  lastQrText = "";
+  updatePreview();
+  refreshAllTextareas();
+});
+  </script>
+</body>
+</html>
